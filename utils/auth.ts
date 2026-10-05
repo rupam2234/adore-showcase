@@ -1,7 +1,7 @@
 ﻿import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
 import { and, eq, gt, lt, sql } from 'drizzle-orm';
-import { db, sessions, users } from './db';
+import { db, sessions, users, isDatabaseConfigured } from './db';
 import {
   ACCESS_COOKIE_NAME,
   REFRESH_COOKIE_NAME,
@@ -11,15 +11,23 @@ import {
 /**
  * Signing keys come from the environment and NOTHING else.
  *
- * There is deliberately no `?? 'dev-secret'` fallback here. A missing
- * JWT_SECRET must fail closed â€” an app that silently signs tokens with a
- * well-known string is worse than one that refuses to boot. The middleware
- * treats an unset secret as "auth not configured" and passes through, so
- * local UI work is still possible, but no token is ever forged.
+ * A missing JWT_SECRET must fail closed in production -- an app that silently
+ * signs tokens with a well-known string is worse than one that refuses to boot.
+ *
+ * The one exception is the showcase local demo mode, where `npm run dev`
+ * must sign a token for the sample login to work on a fresh clone with no setup.
+ * That fallback is guarded on NODE_ENV !== production AND on the absence of
+ * DATABASE_URL, so a deployed build can never reach it. Production still
+ * refuses to sign anything without a real secret.
  */
-function readSecret(name: string): Uint8Array | null {
+function readSecret(name: string, demoFallback?: string): Uint8Array | null {
   const raw = process.env[name];
-  if (!raw) return null;
+  if (!raw) {
+    const isDemo =
+      process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL;
+    if (isDemo && demoFallback) return new TextEncoder().encode(demoFallback);
+    return null;
+  }
   // jose requires >= 256 bits for HS256. Anything shorter is a misconfiguration
   // worth rejecting at boot rather than at first login.
   if (raw.length < 32) {
@@ -30,8 +38,14 @@ function readSecret(name: string): Uint8Array | null {
   return new TextEncoder().encode(raw);
 }
 
-const JWT_SECRET = readSecret('JWT_SECRET');
-const JWT_REFRESH_SECRET = readSecret('JWT_REFRESH_SECRET');
+const JWT_SECRET = readSecret(
+  'JWT_SECRET',
+  'showcase-demo-access-secret-not-for-production'
+);
+const JWT_REFRESH_SECRET = readSecret(
+  'JWT_REFRESH_SECRET',
+  'showcase-demo-refresh-secret-not-for-production'
+);
 
 // Cookie names live in a LEAF module (no imports) so client components can read
 // them without dragging bcryptjs / drizzle / the Neon client into the browser
@@ -184,9 +198,53 @@ export interface UserRow {
   updatedAt: Date;
 }
 
+/**
+ * Demo-mode user store.
+ *
+ * When no DATABASE_URL is configured there is no `users` table, but the auth
+ * routes still have to work so a reviewer can exercise the cookie/token flow
+ * without provisioning anything. This is an in-memory stand-in ONLY for the
+ * showcase's demo transport; the JWT signing, verification, rotation and
+ * cookie handling above are the real implementations.
+ *
+ * The password is a published constant on purpose -- it guards nothing, and a
+ * random one would only make the showcase harder to try.
+ */
+const DEMO_PASSWORD = 'showcase-demo-password';
+const DEMO_USER: UserRow = {
+  id: 'demo-user',
+  email: 'demo@example.com',
+  name: 'Demo User',
+  role: 'user',
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+};
+
+/** Refresh tokens issued in demo mode, so revoke/refresh behave realistically. */
+const demoSessions = new Map<string, { userId: string; expiresAt: number }>();
+
+function demoSessionFor(): { user: UserRow; passwordHash: string } | null {
+  return {
+    user: DEMO_USER,
+    // Pre-hashed at cost 10 so verification costs the same real time it would
+    // against a database row.
+    passwordHash: DEMO_USER_HASH,
+  };
+}
+
+let DEMO_USER_HASH = '';
+
 export async function getUserByEmail(
   email: string
 ): Promise<(UserRow & { passwordHash: string }) | null> {
+  if (!isDatabaseConfigured) {
+    if (!DEMO_USER_HASH) DEMO_USER_HASH = await hashPassword(DEMO_PASSWORD);
+    const found = demoSessionFor();
+    return found && email.toLowerCase() === DEMO_USER.email
+      ? { ...found.user, passwordHash: found.passwordHash }
+      : null;
+  }
+
   const rows = await db
     .select()
     .from(users)
@@ -198,6 +256,8 @@ export async function getUserByEmail(
 }
 
 export async function getUserById(id: string): Promise<UserRow | null> {
+  if (!isDatabaseConfigured) return id === DEMO_USER.id ? DEMO_USER : null;
+
   const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   const r = rows[0];
   if (!r) return null;
@@ -282,6 +342,23 @@ export async function storeSession(
   token: string,
   expiresAt: Date
 ): Promise<void> {
+  if (!isDatabaseConfigured) {
+    // Demo transport: same pruning rules, held in memory.
+    const now = Date.now();
+    for (const [key, row] of demoSessions) {
+      if (row.expiresAt <= now) demoSessions.delete(key);
+    }
+    const forUser = [...demoSessions.entries()].filter(([, r]) => r.userId === userId);
+    if (forUser.length >= MAX_SESSIONS_PER_USER) {
+      forUser
+        .sort((a, b) => b[1].expiresAt - a[1].expiresAt)
+        .slice(MAX_SESSIONS_PER_USER - 1)
+        .forEach(([key]) => demoSessions.delete(key));
+    }
+    demoSessions.set(token, { userId, expiresAt: expiresAt.getTime() });
+    return;
+  }
+
   // Housekeeping so the table can't grow without bound (runs on the rare
   // login/refresh path, not per request):
   // 1. Drop this user's already-expired sessions.
@@ -307,6 +384,10 @@ export async function storeSession(
 }
 
 export async function revokeSession(token: string): Promise<void> {
+  if (!isDatabaseConfigured) {
+    demoSessions.delete(token);
+    return;
+  }
   await db.delete(sessions).where(eq(sessions.token, token));
 }
 
@@ -317,6 +398,11 @@ export async function revokeSession(token: string): Promise<void> {
  * server-side row is gone, so it is refused.
  */
 export async function isSessionValid(token: string): Promise<boolean> {
+  if (!isDatabaseConfigured) {
+    const row = demoSessions.get(token);
+    return Boolean(row && row.expiresAt > Date.now());
+  }
+
   const rows = await db
     .select({ userId: sessions.userId })
     .from(sessions)

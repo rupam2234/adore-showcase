@@ -76,6 +76,17 @@ export function findCategory(slug: string): CategoryNode | null {
   return null;
 }
 
+/**
+ * Expand a category slug to itself + known children, for the demo transport.
+ *
+ * Same rule as the SQL-side `expandCategorySlugs`, factored out so both paths
+ * cannot drift when a category is added.
+ */
+export function expandCategorySlugsForDemo(slug: string): string[] {
+  const children = CATEGORY_CHILDREN[slug as CategorySlug];
+  return children ? [slug, ...children] : [slug];
+}
+
 export function categoryPageMetadata(slug: string): {
   title: string;
   description: string;

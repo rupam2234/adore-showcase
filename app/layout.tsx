@@ -3,6 +3,10 @@ import './globals.css';
 import { SiteHeader } from '@/components/theme/header';
 
 export const metadata: Metadata = {
+  // Relative metadata image paths need an absolute base to resolve against.
+  // Reads from the env so a preview deploy needs no code change; falls back to
+  // the local origin so `npm run dev` and `npm run build` work with no setup.
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
   title: {
     default: 'Adore Showcase (Sanitized)',
     template: '%s | Adore Showcase',

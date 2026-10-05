@@ -1,8 +1,15 @@
-﻿import { rawQuery, sql } from './db';
+﻿import { rawQuery, sql, isDatabaseConfigured } from './db';
+import {
+  getDemoFacets,
+  getDemoProduct,
+  getDemoProducts,
+  getDemoSlugs,
+} from './demo-data';
 import { cache } from 'react';
 import { unstable_cache } from 'next/cache';
 import {
   CATEGORY_CHILDREN,
+  CATEGORY_TREE,
   type CategoryRow,
   type CategorySlug,
 } from './categories';
@@ -27,6 +34,7 @@ type ProductRow = {
   details: string[] | null;
   material: string | null;
   fit: string | null;
+  is_featured: boolean;
   categories: Array<{
     slug: string;
     name: string;
@@ -171,6 +179,7 @@ function mapProductRow(row: ProductRow): ProductCardData {
     })),
     price: row.price,
     compareAtPrice: row.compare_at_price,
+    isFeatured: row.is_featured,
     currency: row.currency,
     colors: row.colors ?? [],
     sizes,
@@ -235,6 +244,10 @@ export async function getProductsForSection(
     limit = 8,
   } = options;
 
+  // Demo transport: no database configured, so serve the in-memory catalogue.
+  // Same read model and same filtering semantics, without needing Postgres.
+  if (!isDatabaseConfigured) return getDemoProducts(options);
+
   const categoryFilter = categoryFilterSql(
     categorySlugsFor(categorySlug, includeChildren)
   );
@@ -284,6 +297,7 @@ export async function getProductsForSection(
       p.details,
       p.material,
       p.fit,
+      p.is_featured,
       (
         SELECT json_agg(
           json_build_object('slug', c.slug, 'name', c.name, 'parent_slug', parent.slug)
@@ -437,6 +451,7 @@ export async function getFilterFacets(categorySlug?: string): Promise<{
 }> {
   // "all" is the key for the unfiltered listing (categorySlugsFor maps it to
   // null, i.e. no category filter) -- the argument doubles as the cache key.
+  if (!isDatabaseConfigured) return getDemoFacets(categorySlug);
   return fetchFilterFacets(categorySlug ?? 'all');
 }
 
@@ -451,6 +466,8 @@ export async function getFilterFacets(categorySlug?: string): Promise<{
 export const getProductBySlug = cache(async function getProductBySlug(
   slug: string
 ): Promise<ProductCardData | null> {
+  if (!isDatabaseConfigured) return getDemoProduct(slug);
+
   // Slug is a bound parameter, never interpolated -- an attacker-controlled
   // slug cannot break out of the string literal.
   const rows = await rawQuery<ProductRow>(sql`
@@ -462,6 +479,7 @@ export const getProductBySlug = cache(async function getProductBySlug(
       p.details,
       p.material,
       p.fit,
+      p.is_featured,
       (
         SELECT json_agg(
           json_build_object('slug', c.slug, 'name', c.name, 'parent_slug', parent.slug)
@@ -554,7 +572,9 @@ export const getProductBySlug = cache(async function getProductBySlug(
  * with no active variant -- so we never prerender a page that would 404.
  * Feeds `generateStaticParams` on the product route.
  */
-export async function getActiveProductSlugs(): Promise<string[]> {
+  export async function getActiveProductSlugs(): Promise<string[]> {
+  if (!isDatabaseConfigured) return getDemoSlugs();
+
   const rows = await rawQuery<{ slug: string }>(sql`
     SELECT p.slug
     FROM products p
@@ -593,6 +613,22 @@ const fetchCategories = unstable_cache(
   { tags: [SHOP_CATEGORIES_TAG], revalidate: SHOP_CACHE_SECONDS }
 );
 
-export async function getCategories(): Promise<CategoryRow[]> {
+  export async function getCategories(): Promise<CategoryRow[]> {
+  if (!isDatabaseConfigured) {
+    // Flatten the taxonomy for the demo transport, mirroring what the cached
+    // SQL query returns.
+    return CATEGORY_TREE.flatMap(parent =>
+      [parent, ...(parent.children ?? [])].map(node => ({
+        id: node.slug,
+        slug: node.slug,
+        name: node.name,
+        description: node.description ?? null,
+        parentId: node.slug === parent.slug ? null : parent.slug,
+      }))
+    );
+  }
+
   return fetchCategories();
 }
+
+

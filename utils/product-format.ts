@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Product types and pure formatting helpers.
  *
  * Everything here is dependency-free and side-effect-free, so it can be
@@ -37,7 +37,7 @@ export type ProductSizeOption = {
 };
 
 /**
- * The single read model every product surface consumes — the listing card, the
+ * The single read model every product surface consumes â€” the listing card, the
  * detail page and the API all return exactly this shape. One shape means one
  * component can render a card from any of them.
  */
@@ -50,6 +50,8 @@ export type ProductCardData = {
   material: string | null;
   fit: string | null;
   categories: ProductCategory[];
+  /** Drives the featured-first sort and the featured-only listing. */
+  isFeatured: boolean;
   price: string;
   compareAtPrice: string | null;
   currency: string;
@@ -63,7 +65,7 @@ export type ProductCardData = {
 /**
  * Apparel size order.
  *
- * A lexicographic sort would produce XS, XXL, XL — because "XXL" < "XL" as
+ * A lexicographic sort would produce XS, XXL, XL â€” because "XXL" < "XL" as
  * strings. This is the one ordering a size dropdown has to get right, so it is
  * defined once and used by both the SQL CASE expression and this function.
  */
@@ -83,7 +85,7 @@ export function sortSizes(sizes: string[]): string[] {
 }
 
 /**
- * Money comes back from Postgres `numeric` as a string, deliberately — parsing
+ * Money comes back from Postgres `numeric` as a string, deliberately â€” parsing
  * it into a JS number would introduce float drift in a currency column.
  * Formatting happens once, at the edge of the render, never in the query.
  */

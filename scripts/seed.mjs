@@ -137,7 +137,7 @@ function slugify(s) {
 }
 
 /** Rough garment outlines per category, purely to give the grid variety. */
-function silhouette(category, W, H) {
+function silhouette(category, W) {
   const cx = W / 2;
   if (category === 't-shirts' || category === 'blouses')
     return `<path d="M${cx - 110} 250 L${cx - 30} 205 L${cx} 230 L${cx + 30} 205 L${cx + 110} 250 L${cx + 80} 320 L${cx + 62} 300 L${cx + 62} 590 L${cx - 62} 590 L${cx - 62} 300 L${cx - 80} 320 Z"/>`;
@@ -177,7 +177,7 @@ function placeholderSvg({ name, category, tint }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Placeholder image">
   <rect width="${W}" height="${H}" fill="${tint}"/>
   <g fill="none" stroke="#2B2620" stroke-opacity="0.28" stroke-width="6" stroke-linejoin="round">
-    ${silhouette(category, W, H)}
+    ${silhouette(category, W)}
   </g>
   <text x="${W / 2}" y="${H - 96}" text-anchor="middle" font-family="Georgia, serif" font-size="30" fill="#2B2620" fill-opacity="0.72">${escapeXml(name)}</text>
   <text x="${W / 2}" y="${H - 56}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#2B2620" fill-opacity="0.5">placeholder -- not a real product</text>
