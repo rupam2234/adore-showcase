@@ -1,0 +1,45 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# ── Environment & secrets ──────────────────────────────────
+# Ignore every env file by default, then re-admit the template so
+# the variable NAMES are documented in the repo while no value can
+# be. `.env.local` overrides `.env` in Next.js, which is why both
+# are covered here.
+.env*
+!.env.example
+
+# ── Local database & tooling artefacts ─────────────────────
+*.tsbuildinfo
+.shiprocket-token.json
+
+# ── Logs ───────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Secrets scanning ───────────────────────────────────────
+# Never commit scanner output or verification bundles; these are
+# themselves a map of where secrets were found.
+.secrets.baseline
+*.pem
+*.key
+
+# misc
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
