@@ -1,19 +1,19 @@
-﻿# Adore â€” Sanitized Engineering Showcase
+﻿# Adore - Sanitized Engineering Showcase
 
 A production e-commerce platform for a clothing brand, built with Next.js (App
 Router), TypeScript, Drizzle ORM, Neon (serverless Postgres), Tailwind CSS and
 JWT session auth. This repository is a **sanitized extract** built so reviewers
-can assess the engineering â€” the architecture, the query model, the caching and
-session design â€” without access to the proprietary source, the real catalogue,
+can assess the engineering - the architecture, the query model, the caching and
+session design - without access to the proprietary source, the real catalogue,
 the vendor integrations or any credential. The live product is at
-**https://adore.ind.in** â€” *This is a sanitized showcase. The production source
+**https://adore.ind.in** - *This is a sanitized showcase. The production source
 is private.*
 
 The patterns here are real: the SQL, the cache boundaries, the token lifecycle
 and the rate limiter are the actual implementations, with real reasoning intact.
 What is substituted is the data (invented products, generated placeholder
 images), the branding (neutral copy, no logo or photography), and the
-integrations (payments, admin, courier, email â€” all omitted).
+integrations (payments, admin, courier, email - all omitted).
 
 ---
 
@@ -84,13 +84,13 @@ graph TB
 
 ### Why SSG / ISR
 
-The catalogue is **read far more often than it is written** â€” 300+ product
+The catalogue is **read far more often than it is written** - 300+ product
 listings, edited occasionally. Rendering it per request meant paying a
 catalogue query on every hit; shipping it fully static would mean a product edit
 waiting for the next deploy. ISR splits the difference:
 
 - `generateStaticParams` prerenders every shippable product at build time, and
-  `dynamicParams = false` makes that set **exhaustive** â€” an unknown slug 404s
+  `dynamicParams = false` makes that set **exhaustive** - an unknown slug 404s
   immediately instead of triggering an on-demand render. With a catalogue this
   size that also removes the "probe for valid slugs" vector, since a rejected
   URL never reaches the database.
@@ -100,7 +100,7 @@ waiting for the next deploy. ISR splits the difference:
 
 `getActiveProductSlugs` deliberately uses the **same predicate** as
 `getProductBySlug` (ACTIVE + at least one active variant). If the two
-disagreed, the build would emit static pages that render `notFound()` â€” URLs
+disagreed, the build would emit static pages that render `notFound()` - URLs
 that can never work.
 
 The `revalidate = 300` on `app/shop/layout.tsx` is set on the **layout**, not
@@ -111,7 +111,7 @@ revalidation boundary and can never be half-updated relative to each other.
 
 A product card needs images, the cheapest active price, the colour list, the
 per-size stock, the full variant matrix, and its categories. Written naively
-that is `1 + 6` queries per listing â€” the classic N+1 â€” and because the page
+that is `1 + 6` queries per listing - the classic N+1 - and because the page
 waits for all of them, latency is the **sum**, not the maximum.
 
 `getProductsForSection` (`utils/products.ts`) instead folds every relation into
@@ -138,17 +138,17 @@ worth noting:
 
 - The `JOIN LATERAL` is an **inner** join, so products with no active variant
   are filtered out in SQL rather than surfacing as priceless cards downstream.
-- Price is the cheapest *active* variant â€” which is what "from $X" means.
+- Price is the cheapest *active* variant - which is what "from $X" means.
 - The size rollup uses `SUM(stock)`, `MIN(price)` and
   `array_agg(compare_at_price ORDER BY price)[1]` to collapse the colour Ã— size
   matrix to one row per size, keeping the compare-at price that actually belongs
   to the cheapest variant.
 - `idx_product_variants_product_active (product_id, is_active, price)` is
   ordered so the LATERAL's `ORDER BY price ASC LIMIT 1` is served by the index
-  itself â€” removing both a Sort and a Filter node from the plan.
+  itself - removing both a Sort and a Filter node from the plan.
 ### Rate limiting
 
-`utils/rate-limit.ts` â€” a sliding-window counter, deliberately kept small and
+`utils/rate-limit.ts` - a sliding-window counter, deliberately kept small and
 explicit about its limits rather than pulling in a dependency.
 
 - **Sliding, not fixed.** Timestamps within the window are kept per key, so an
@@ -167,7 +167,7 @@ explicit about its limits rather than pulling in a dependency.
 
 Stated limitation, not hidden: the map is **per server instance** and resets on
 redeploy, so on serverless it bounds a burst but is not a hard global cap. That
-is the right trade at this scale â€” it costs nothing and needs no extra
+is the right trade at this scale - it costs nothing and needs no extra
 infrastructure. If it ever needs to be exact, swap the `Map` for Redis/Upstash;
 the call sites would not change.
 
@@ -183,7 +183,7 @@ Access + refresh token pair, both in `httpOnly` cookies (`utils/auth.ts`):
 | Purpose | authorizes requests | mints new access tokens |
 
 - **Separate signing secrets.** A leaked access token cannot be replayed as a
-  refresh token to mint a long-lived session â€” the classic token-confusion
+  refresh token to mint a long-lived session - the classic token-confusion
   escalation.
 - **`httpOnly` + `secure` + `sameSite=lax`.** `httpOnly` keeps the token out of
   reach of page scripts, so an XSS bug is not fatal for session theft.
@@ -221,7 +221,7 @@ click therefore costs **one** database round trip instead of two, and the facets
 stay correct across every filter combination. An admin write calls
 `revalidateTag(..., { expire: 0 })`, with the 300s TTL as a backstop.
 
-For `getProductBySlug`, React's `cache()` dedupes within a single render pass â€”
+For `getProductBySlug`, React's `cache()` dedupes within a single render pass -
 its token key is per-request, so two components asking for the same product cost
 one query with no risk of one user's data reaching another.
 
@@ -240,7 +240,7 @@ This showcase demonstrates engineering, not the business. The following is
 | ------- | --- |
 | **Payments / checkout** | Payment provider integration, webhook verification, order ledger, promo codes. Highest-density proprietary and PCI-adjacent logic. |
 | **Admin tooling** | The entire `/admin` area and `utils/admin-*.ts`: product CRUD, promos, order ledger, returns triage. |
-| **Returns & refunds** | Return eligibility rules, fraud scoring, refund reconciliation â€” core business IP. |
+| **Returns & refunds** | Return eligibility rules, fraud scoring, refund reconciliation - core business IP. |
 | **Courier / shipping** | Shipment creation, rate estimation, tracking webhooks, serviceability by PIN. Vendor-specific. |
 | **Transactional email** | Templates, queue draining, delivery webhooks. Contains real reply-to addresses and brand copy. |
 | **Cart & accounts** | Cart merge-on-login, saved addresses, order history, profile. |
@@ -250,8 +250,8 @@ This showcase demonstrates engineering, not the business. The following is
 
 ### Placeholder assets
 
-All product imagery is **generated SVG** written by `scripts/seed.mjs` â€” a
-tinted rectangle, a generic garment silhouette and the text "placeholder â€” not a
+All product imagery is **generated SVG** written by `scripts/seed.mjs` - a
+tinted rectangle, a generic garment silhouette and the text "placeholder - not a
 real product". There are no real photographs, no logo, no brand typeface and no
 marketing copy anywhere in this repository. Product names ("Sample Everyday
 Tee"), materials, fits and descriptions are invented. The single email address
@@ -332,7 +332,7 @@ npm run dev
 ```
 app/
   layout.tsx              Root layout + metadata
-  page.tsx                Homepage â€” ISR, parallel featured/latest reads
+  page.tsx                Homepage - ISR, parallel featured/latest reads
   shop/
     layout.tsx            Shared ISR window + category nav
     page.tsx              Listing, URL-driven filters
@@ -382,7 +382,7 @@ hidden.
 ## Screenshots
 
 Screenshots and a short recording belong in
-[`docs/screenshots/`](docs/screenshots/) â€” see the README there for the intended
+[`docs/screenshots/`](docs/screenshots/) - see the README there for the intended
 filenames and embed snippets.
 
 ---
@@ -397,7 +397,7 @@ This repository has been scanned for credentials and contains none. Specifically
   credentials or admin credentials are present.
 - All email addresses use the reserved `example.com` domain.
 - No production domains or internal hostnames appear in the code.
-- `git log` contains a **single** initial commit â€” the history was not carried
+- `git log` contains a **single** initial commit - the history was not carried
   over from the private repository, so no old commit messages or diffs leak.
 
 If you fork this, keep it that way: run a secret scanner (`gitleaks detect`,
@@ -407,7 +407,7 @@ If you fork this, keep it that way: run a secret scanner (`gitleaks detect`,
 
 ## License
 
-MIT â€” see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
 
 Note that the license covers **this sanitized showcase only**. The production
 Adore source and the Adore brand remain private and unlicensed.
@@ -429,7 +429,7 @@ in rough order of impact:
    the largest single win and the reason the atomic query model exists.
 2. **ISR.** The homepage and product pages became statically generated with a
    5-minute window. After the first hit, repeat visitors are served from the
-   edge with **zero** database queries â€” which is what took repeat-view latency
+   edge with **zero** database queries - which is what took repeat-view latency
    below the cold path's floor.
 3. **Indexed the variants table.** `idx_product_variants_product_active
    (product_id, is_active, price)` lets the cheapest-price `LATERAL` be served
@@ -450,7 +450,7 @@ call the same function, the two can never drift apart.
 | Layer | Scope | Lifetime | Used for |
 | ----- | ----- | -------- | -------- |
 | React `cache()` | one render pass | request | `getProductBySlug` when layout + page both need it |
-| `unstable_cache` + tags | across requests | 300s + tag invalidation | Filter facets, category nav â€” change only when a product is edited |
+| `unstable_cache` + tags | across requests | 300s + tag invalidation | Filter facets, category nav - change only when a product is edited |
 | ISR (`revalidate`) | across requests | 300s | Homepage, shop, product pages |
 
 ---
